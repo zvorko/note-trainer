@@ -1,0 +1,319 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --accent:  #1a6bb5;
+    --bg:      #f5f7fa;
+    --card:    #ffffff;
+    --border:  #dce0e8;
+    --text:    #1a1a2e;
+    --muted:   #666677;
+}
+
+html, body {
+    height: 100%;
+    background: var(--bg);
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+}
+
+#app {
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+/* ── Screens ──────────────────────────────────────────────────────────────── */
+
+.screen {
+    width: 100%;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 20px 16px 40px;
+}
+
+h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* ── Setup screen form ────────────────────────────────────────────────────── */
+
+.setup-form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 6px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.field > label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.field input[type="text"],
+.field select {
+    width: 100%;
+    max-width: 100%;
+}
+
+.field input[type="number"] {
+    width: 80px;
+}
+
+.seg-wide {
+    width: 100%;
+}
+
+.btn-full {
+    width: 100%;
+    height: 50px;
+    font-size: 1rem;
+    margin-top: 4px;
+}
+
+/* ── Game screen header ───────────────────────────────────────────────────── */
+
+#screen-game { gap: 6px; }
+
+.game-header {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.game-header h1 {
+    font-size: 1.05rem;
+    text-align: center;
+}
+
+#score-label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.btn-back {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    height: 36px;
+    padding: 0 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Inputs ──────────────────────────────────────────────────────────────── */
+
+input[type="text"], select {
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0 12px;
+    font-size: 0.95rem;
+    background: var(--card);
+    color: var(--text);
+    outline: none;
+    -webkit-appearance: none;
+}
+
+input[type="text"]:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(26,107,181,.2);
+}
+
+/* ── Canvas wrappers ─────────────────────────────────────────────────────── */
+
+.canvas-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+canvas {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    touch-action: none;        /* prevent scroll-on-drag while tapping canvases */
+    -webkit-tap-highlight-color: transparent;
+    /* CSS max-width so canvases shrink on very narrow screens; event coords
+       are re-mapped in JS via getBoundingClientRect()                       */
+    max-width: 100%;
+}
+
+/* ── Feedback message ────────────────────────────────────────────────────── */
+
+.feedback {
+    flex: 1;                  /* grows to fill .feedback-row */
+    min-height: 1.8em;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 5px 12px;
+    border-radius: 7px;
+    transition: background 0.2s;
+}
+
+.feedback.correct   { color: #175a17; background: #e4f7e4; }
+.feedback.incorrect { color: #8b1010; background: #fde8e8; }
+
+/* ── Input-mode segmented control ────────────────────────────────────────── */
+
+.seg-control {
+    display: flex;
+    width: 220px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+.seg-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.seg-option input[type="radio"] { display: none; }
+
+.seg-option span {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--muted);
+    border-right: 1.5px solid var(--border);
+    transition: background 0.15s, color 0.15s;
+}
+
+.seg-option:last-child span { border-right: none; }
+
+.seg-option input:checked + span {
+    background: var(--accent);
+    color: white;
+}
+
+/* ── Feedback row (timing + feedback side by side) ───────────────────────── */
+
+.feedback-row {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+#timing-bar {
+    flex-shrink: 0;
+    height: auto;
+    min-height: 30px;
+    min-width: 90px;
+    padding: 6px 10px;
+    text-align: center;
+    font-size: 0.88rem;
+    font-weight: 700;
+    border-radius: 6px;
+    transition: background 0.35s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* ── Progress ────────────────────────────────────────────────────────────── */
+
+#progress-label {
+    font-size: 0.82rem;
+    font-style: italic;
+    color: var(--muted);
+    min-height: 1.2em;
+    text-align: center;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn-primary, .btn-secondary, .btn-ghost {
+    height: 44px;
+    padding: 0 22px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.93rem;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+}
+
+.btn-primary:active, .btn-secondary:active, .btn-ghost:active { opacity: 0.75; }
+
+.btn-primary   { background: var(--accent); color: white; }
+.btn-secondary { background: #e5effd; color: var(--accent); }
+.btn-ghost     { background: transparent; color: var(--muted);
+                 border: 1px solid var(--border); font-size: 0.8rem; height: 36px; }
+
+input[type="number"] {
+    width: 54px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    text-align: center;
+    font-size: 0.88rem;
+    background: var(--card);
+    color: var(--text);
+    -webkit-appearance: none;
+}
+
+/* ── Show-key checkbox row ───────────────────────────────────────────────── */
+
+.show-key-row {
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.show-key-row label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* ── Footer link ─────────────────────────────────────────────────────────── */
+
+.footer-row {
+    display: flex;
+    justify-content: center;
+}

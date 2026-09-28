@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- disables user zoom so the app feels native inside Capacitor -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Note Trainer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SCREEN 1 – Setup                                                    -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div id="screen-setup" class="screen">
+
+        <h1>Note Trainer</h1>
+
+        <div class="setup-form">
+
+            <div class="field">
+                <label for="player-input">Your Name</label>
+                <input type="text" id="player-input" list="player-list"
+                       autocomplete="off" autocorrect="off" spellcheck="false"
+                       placeholder="Enter name">
+                <datalist id="player-list"></datalist>
+            </div>
+
+            <div class="field">
+                <label for="key-select">Key</label>
+                <select id="key-select"></select>
+            </div>
+
+            <div class="field">
+                <label>Instrument</label>
+                <div class="seg-control seg-wide">
+                    <label class="seg-option">
+                        <input type="radio" name="input-mode" value="piano" checked>
+                        <span>&#127929; Piano</span>
+                    </label>
+                    <label class="seg-option">
+                        <input type="radio" name="input-mode" value="violin">
+                        <span>&#127931; Violin</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="show-key-row" style="display:none">
+                <label>
+                    <input type="checkbox" id="show-key-cb">
+                    Show legal positions for selected key
+                </label>
+            </div>
+
+            <div class="field">
+                <label>Mode</label>
+                <div class="seg-control seg-wide">
+                    <label class="seg-option">
+                        <input type="radio" name="game-mode" value="test" checked>
+                        <span>&#127381; Test</span>
+                    </label>
+                    <label class="seg-option">
+                        <input type="radio" name="game-mode" value="free">
+                        <span>&#9654; Note by Note</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="field" id="test-count-row">
+                <label for="test-count">Number of Notes</label>
+                <input type="number" id="test-count" value="10" min="1" max="99">
+            </div>
+
+            <button id="start-btn" class="btn-primary btn-full">Start &#9654;</button>
+
+        </div>
+
+        <div class="footer-row">
+            <button id="download-log-btn" class="btn-ghost">&#8681; Download game log</button>
+        </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SCREEN 2 – Game                                                     -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div id="screen-game" class="screen" style="display:none">
+
+        <div class="game-header">
+            <button id="back-btn" class="btn-back">&#8592; Back</button>
+            <h1>What note is this?</h1>
+            <span id="score-label">Score: 0 / 0</span>
+        </div>
+
+        <!-- Treble-clef staff --------------------------------------------->
+        <div class="canvas-wrap">
+            <canvas id="staff-canvas" width="340" height="180"></canvas>
+        </div>
+
+        <p id="progress-label"></p>
+
+        <!-- Piano keyboard -------------------------------------------------->
+        <div id="piano-wrap" class="canvas-wrap">
+            <canvas id="piano-canvas" width="324" height="116"></canvas>
+        </div>
+
+        <!-- Violin fingerboard ---------------------------------------------->
+        <div id="fb-wrap" class="canvas-wrap" style="display:none">
+            <canvas id="fingerboard-canvas" width="200" height="300"></canvas>
+        </div>
+
+        <!-- Feedback + timing in one row ---------------------------------->
+        <div class="feedback-row">
+            <div id="timing-bar"></div>
+            <div id="feedback" class="feedback"></div>
+        </div>
+
+        <!-- Next note button (note-by-note mode) ---------------------------->
+        <button id="next-btn" class="btn-primary" style="display:none">
+            Next Note &#8594;
+        </button>
+
+        <!-- Restart button (shown after test completes) -------------------->
+        <button id="restart-btn" class="btn-secondary btn-full" style="display:none">
+            &#8635; Restart Test
+        </button>
+
+    </div>
+
+</div>
+
+<!-- Single entry-point; notes.js is imported inside app.js as an ES module -->
+<script type="module" src="app.js"></script>
+</body>
+</html>
