@@ -368,6 +368,148 @@ function fingerboardHitTest(x, y) {
     return NOTE_LOOKUP.get(`${STRING_ORDER[bestStr]}:${best.finger}:${best.low}`) ?? null;
 }
 
+// ─── Progress chart (SVG line chart) ────────────────────────────────────────
+
+const CHART = { W: 320, H: 140, L: 34, R: 12, T: 12, B: 18 };
+
+function svgEl(tag, attrs = {}) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+}
+
+// Rounds a max value up to a "nice" step so axis ticks land on clean numbers.
+function niceCeil(max) {
+    if (max <= 0) return 1;
+    const pow  = Math.pow(10, Math.floor(Math.log10(max)));
+    const norm = max / pow;
+    const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+    return step * pow;
+}
+
+// Builds an interactive single-series line chart inside `svg`, with a
+// crosshair + tooltip in `tooltipEl`. Returns { render(points, opts) }.
+// points: [{ x: index, value, label }] in chronological (left-to-right) order.
+function createLineChart(svg, tooltipEl) {
+    const plotW = CHART.W - CHART.L - CHART.R;
+    const plotH = CHART.H - CHART.T - CHART.B;
+    let current = [];
+    let yMin = 0, yMax = 1, color = '#1a6bb5', formatValue = v => String(v);
+
+    const xAt = i => current.length <= 1
+        ? CHART.L + plotW / 2
+        : CHART.L + (i / (current.length - 1)) * plotW;
+    const yAt = v => CHART.T + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
+
+    function hide() { tooltipEl.classList.remove('visible'); crosshair.setAttribute('opacity', 0); }
+
+    function showAt(clientX) {
+        if (!current.length) return;
+        const rect = svg.getBoundingClientRect();
+        const svgX = (clientX - rect.left) / rect.width * CHART.W;
+        let idx = 0, best = Infinity;
+        current.forEach((p, i) => {
+            const d = Math.abs(xAt(i) - svgX);
+            if (d < best) { best = d; idx = i; }
+        });
+        const p  = current[idx];
+        const px = xAt(idx), py = yAt(p.value);
+
+        crosshair.setAttribute('opacity', 1);
+        crosshair.setAttribute('x1', px);
+        crosshair.setAttribute('x2', px);
+        crosshair.setAttribute('y1', CHART.T);
+        crosshair.setAttribute('y2', CHART.T + plotH);
+        hoverDot.setAttribute('opacity', 1);
+        hoverDot.setAttribute('cx', px);
+        hoverDot.setAttribute('cy', py);
+
+        const rectSvg = svg.getBoundingClientRect();
+        tooltipEl.textContent = `${p.label}: ${formatValue(p.value)}`;
+        tooltipEl.style.left = `${(px / CHART.W) * rectSvg.width}px`;
+        tooltipEl.style.top  = `${(py / CHART.H) * rectSvg.height}px`;
+        tooltipEl.classList.add('visible');
+    }
+
+    // static layers created once, updated on each render()
+    const gridGroup = svgEl('g');
+    const lineGroup = svgEl('g');
+    const crosshair = svgEl('line', {
+        class: 'chart-crosshair', stroke: '#c3c2b7', 'stroke-width': 1, opacity: 0,
+    });
+    const hoverDot = svgEl('circle', { r: 5, fill: color, stroke: 'white', 'stroke-width': 2, opacity: 0 });
+    svg.append(gridGroup, lineGroup, crosshair, hoverDot);
+
+    svg.addEventListener('pointermove', e => showAt(e.clientX));
+    svg.addEventListener('pointerdown', e => showAt(e.clientX));
+    svg.addEventListener('pointerleave', hide);
+    svg.addEventListener('pointerup', e => {
+        if (e.pointerType === 'touch') setTimeout(hide, 1500);
+    });
+
+    function render(points, opts) {
+        current     = points;
+        yMin        = opts.yMin;
+        yMax        = opts.yMax;
+        color       = opts.color;
+        formatValue = opts.formatValue ?? (v => String(v));
+        hoverDot.setAttribute('fill', color);
+        hide();
+
+        gridGroup.replaceChildren();
+        lineGroup.replaceChildren();
+        svg.setAttribute('viewBox', `0 0 ${CHART.W} ${CHART.H}`);
+
+        opts.yTicks.forEach(tick => {
+            const y = yAt(tick);
+            gridGroup.append(svgEl('line', {
+                x1: CHART.L, x2: CHART.L + plotW, y1: y, y2: y,
+                stroke: '#e1e0d9', 'stroke-width': 1,
+            }));
+            gridGroup.append(Object.assign(svgEl('text', {
+                x: CHART.L - 6, y: y + 3, 'text-anchor': 'end',
+                class: 'chart-axis-label',
+            }), { textContent: opts.formatTick ? opts.formatTick(tick) : String(tick) }));
+        });
+
+        if (!points.length) return;
+
+        if (points.length >= 2) {
+            const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.value)}`).join(' ');
+            lineGroup.append(svgEl('path', {
+                d, fill: 'none', stroke: color, 'stroke-width': 2,
+                'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+            }));
+        }
+
+        // per-point markers only up to a readable density; beyond that just the line
+        if (points.length <= 25) {
+            points.forEach((p, i) => {
+                lineGroup.append(svgEl('circle', {
+                    cx: xAt(i), cy: yAt(p.value), r: 5, fill: 'white',
+                }));
+                lineGroup.append(svgEl('circle', {
+                    cx: xAt(i), cy: yAt(p.value), r: 4, fill: color,
+                }));
+            });
+        }
+
+        // value label at the line's end
+        const last  = points[points.length - 1];
+        const lx    = xAt(points.length - 1);
+        const ly    = yAt(last.value);
+        const above = (last.value - yMin) / (yMax - yMin || 1) < 0.85;
+        lineGroup.append(Object.assign(svgEl('text', {
+            x: lx, y: above ? ly - 10 : ly + 16,
+            'text-anchor': 'end', class: 'chart-end-label',
+        }), { textContent: formatValue(last.value) }));
+
+        svg.append(gridGroup, lineGroup, crosshair, hoverDot); // keep crosshair/dot on top
+    }
+
+    return { render };
+}
+
 // ─── Persistence (localStorage) ──────────────────────────────────────────────
 
 function loadPlayers() {
@@ -384,6 +526,21 @@ function savePlayer(name) {
         list.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
         localStorage.setItem('nt_players', JSON.stringify(list));
     }
+}
+
+const HISTORY_KEY = 'nt_history';
+const HISTORY_MAX = 300;
+
+function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    catch { return []; }
+}
+
+function saveHistoryRecord(record) {
+    const list = loadHistory();
+    list.push(record);
+    if (list.length > HISTORY_MAX) list.splice(0, list.length - HISTORY_MAX);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
 }
 
 class GameLogger {
@@ -473,6 +630,19 @@ class NoteTrainerApp {
         this._showKeyCb    = document.getElementById('show-key-cb');
         this._screenSetup  = document.getElementById('screen-setup');
         this._screenGame   = document.getElementById('screen-game');
+        this._screenProgress    = document.getElementById('screen-progress');
+        this._progressSelect    = document.getElementById('progress-player-select');
+        this._progressEmpty     = document.getElementById('progress-empty');
+        this._progressCharts    = document.getElementById('progress-charts');
+        this._progressTableWrap = document.querySelector('.progress-table-wrap');
+        this._progressTableBody = document.querySelector('#progress-table tbody');
+
+        this._accChart = createLineChart(
+            document.getElementById('chart-accuracy'),
+            document.getElementById('chart-accuracy-tip'));
+        this._speedChart = createLineChart(
+            document.getElementById('chart-speed'),
+            document.getElementById('chart-speed-tip'));
 
         this._initUI();
         this._refreshKeyNotes();
@@ -511,6 +681,18 @@ class NoteTrainerApp {
 
         document.getElementById('download-log-btn')
                 .addEventListener('click', () => GameLogger.downloadLog());
+
+        document.getElementById('progress-btn')
+                .addEventListener('click', () => this._openProgress());
+
+        document.getElementById('progress-back-btn')
+                .addEventListener('click', () => {
+                    this._screenProgress.style.display = 'none';
+                    this._screenSetup.style.display    = '';
+                });
+
+        this._progressSelect.addEventListener('change', () =>
+            this._renderProgress(this._progressSelect.value));
 
         // game-mode toggle shows/hides test count field
         document.querySelectorAll('input[name="game-mode"]').forEach(r =>
@@ -552,6 +734,92 @@ class NoteTrainerApp {
             opt.value = name;
             this._playerDL.appendChild(opt);
         });
+    }
+
+    _openProgress() {
+        const history = loadHistory();
+        const players = [...new Set(history.map(r => r.player))].sort((a, b) => a.localeCompare(b));
+
+        this._progressSelect.innerHTML = '';
+        if (!players.length) {
+            const opt = document.createElement('option');
+            opt.textContent = 'No test history yet';
+            this._progressSelect.appendChild(opt);
+            this._progressSelect.disabled = true;
+        } else {
+            this._progressSelect.disabled = false;
+            players.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = name;
+                this._progressSelect.appendChild(opt);
+            });
+            const current = this._playerIn.value.trim();
+            this._progressSelect.value = players.includes(current) ? current : players[0];
+        }
+
+        this._screenSetup.style.display    = 'none';
+        this._screenProgress.style.display = '';
+        this._renderProgress(this._progressSelect.value);
+    }
+
+    _renderProgress(player) {
+        const records = loadHistory()
+            .filter(r => r.player === player)
+            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+        const hasData = records.length > 0;
+        this._progressEmpty.style.display     = hasData ? 'none' : '';
+        this._progressCharts.style.display    = hasData ? '' : 'none';
+        this._progressTableWrap.style.display = hasData ? '' : 'none';
+        if (!hasData) return;
+
+        const dateLabel = ts => new Date(ts).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+        });
+
+        const chartRecords = records.slice(-30);
+        const accPoints = chartRecords.map((r, i) => ({
+            x: i, label: dateLabel(r.ts),
+            value: r.total ? Math.round((r.score / r.total) * 100) : 0,
+        }));
+        const speedPoints = chartRecords.map((r, i) => ({
+            x: i, label: dateLabel(r.ts), value: r.avgTime,
+        }));
+
+        this._accChart.render(accPoints, {
+            yMin: 0, yMax: 100, yTicks: [0, 50, 100],
+            color: '#1a9c53',
+            formatValue: v => `${v}%`,
+            formatTick:  v => `${v}%`,
+        });
+
+        const maxTime = Math.max(...speedPoints.map(p => p.value));
+        const speedMax = niceCeil(maxTime || 1);
+        this._speedChart.render(speedPoints, {
+            yMin: 0, yMax: speedMax, yTicks: [0, speedMax / 2, speedMax],
+            color: '#1a6bb5',
+            formatValue: v => `${v.toFixed(2)} s`,
+            formatTick:  v => v.toFixed(1),
+        });
+
+        this._progressTableBody.replaceChildren(
+            ...[...records].reverse().map(r => {
+                const tr = document.createElement('tr');
+                const pct = r.total ? Math.round((r.score / r.total) * 100) : 0;
+                [
+                    dateLabel(r.ts),
+                    r.key,
+                    r.mode === 'violin' ? 'Violin' : 'Piano',
+                    `${r.score}/${r.total} (${pct}%)`,
+                    `${r.avgTime.toFixed(2)} s`,
+                ].forEach(text => {
+                    const td = document.createElement('td');
+                    td.textContent = text;
+                    tr.appendChild(td);
+                });
+                return tr;
+            })
+        );
     }
 
     _onGameModeChange() {
@@ -618,6 +886,9 @@ class NoteTrainerApp {
         const keyLabel     = this._keySelect.value.split(' / ')[0].trim();
         this._testSize     = Math.max(1, Math.min(99, n));
         this._logger       = new GameLogger(player, this._testSize, keyLabel);
+        this._testPlayer   = player;
+        this._testKeyLabel = keyLabel;
+        this._testMode     = document.querySelector('input[name="input-mode"]:checked')?.value ?? 'piano';
         this._testRemain   = this._testSize;
         this._testTimes    = [];
         this.score         = 0;
@@ -665,12 +936,14 @@ class NoteTrainerApp {
         this.total++;
         const note      = this.currentNote;
         const isCorrect = letter === note.name && accidental === note.accidental;
-        const info      = `${note.string}, ${fingerLabel(note).toLowerCase()}`;
+        const info      = inputMethod === 'violin'
+            ? ` (${note.string}, ${fingerLabel(note).toLowerCase()})`
+            : '';
         let semitones   = 0;
 
         if (isCorrect) {
             this.score++;
-            this._feedback.textContent = `\u2705  ${noteDisplayName(note)} (${info})`;
+            this._feedback.textContent = `\u2705  ${noteDisplayName(note)}${info}`;
             this._feedback.className   = 'feedback correct';
         } else {
             const raw = Math.abs(
@@ -679,7 +952,7 @@ class NoteTrainerApp {
             );
             semitones = Math.min(raw, 12 - raw);
             this._feedback.textContent =
-                `${noteDisplayName(note)} (${info})`;
+                `${noteDisplayName(note)}${info}`;
             this._feedback.className   = 'feedback incorrect';
         }
 
@@ -699,6 +972,15 @@ class NoteTrainerApp {
             if (this._testRemain === 0) {
                 if (this._logger) { this._logger.save(this.score, this.total); this._logger = null; }
                 const avg = this._testTimes.reduce((a, b) => a + b, 0) / this._testTimes.length;
+                saveHistoryRecord({
+                    ts:      new Date().toISOString(),
+                    player:  this._testPlayer,
+                    key:     this._testKeyLabel,
+                    mode:    this._testMode,
+                    score:   this.score,
+                    total:   this.total,
+                    avgTime: avg,
+                });
                 this._progress.textContent =
                     `Test done \u2014 ${this.score}/${this.total} correct, avg ${avg.toFixed(2)} s`;
                 this._testSize = 0;

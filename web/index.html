@@ -80,7 +80,56 @@
         </div>
 
         <div class="footer-row">
+            <button id="progress-btn" class="btn-ghost">&#128200; Progress</button>
             <button id="download-log-btn" class="btn-ghost">&#8681; Download game log</button>
+        </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- SCREEN 3 – Progress                                                 -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div id="screen-progress" class="screen" style="display:none">
+
+        <div class="game-header">
+            <button id="progress-back-btn" class="btn-back">&#8592; Back</button>
+            <h1>Progress</h1>
+            <span></span>
+        </div>
+
+        <div class="field" id="progress-player-row">
+            <label for="progress-player-select">Player</label>
+            <select id="progress-player-select"></select>
+        </div>
+
+        <p id="progress-empty" class="show-key-row" style="display:none">
+            No completed tests yet for this player.
+        </p>
+
+        <div id="progress-charts">
+            <div class="chart-card">
+                <h2>Accuracy</h2>
+                <div class="chart-wrap">
+                    <svg id="chart-accuracy" class="chart-svg" viewBox="0 0 320 140"></svg>
+                    <div class="chart-tooltip" id="chart-accuracy-tip"></div>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h2>Avg. answer time</h2>
+                <div class="chart-wrap">
+                    <svg id="chart-speed" class="chart-svg" viewBox="0 0 320 140"></svg>
+                    <div class="chart-tooltip" id="chart-speed-tip"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-table-wrap">
+            <table id="progress-table" class="progress-table">
+                <thead>
+                    <tr><th>Date</th><th>Key</th><th>Mode</th><th>Score</th><th>Avg time</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
         </div>
 
     </div>
