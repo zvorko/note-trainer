@@ -39,6 +39,8 @@ const FINGER_POSITIONS = [
     { finger: 2, low: false, label: "2"  },
     { finger: 3, low: true,  label: "3L" },
     { finger: 3, low: false, label: "3"  },
+    { finger: 4, low: true,  label: "4L" },
+    { finger: 4, low: false, label: "4"  },
 ];
 
 // fast (string, finger, low) → note lookup
@@ -191,7 +193,7 @@ function posY(finger, low) {
     return low ? (fingerY(finger) + fingerY(finger - 1)) / 2 : fingerY(finger);
 }
 
-function drawFingerboard(ctx, keyNotes, showKey, markerNote) {
+function drawFingerboard(ctx, keyNotes, showKey, markerNotes) {
     ctx.clearRect(0, 0, FB.W, FB.H);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, FB.W, FB.H);
@@ -266,8 +268,9 @@ function drawFingerboard(ctx, keyNotes, showKey, markerNote) {
     ctx.fillText('(tap to answer)', FB.W / 2, FB.BOT + 20);
     ctx.fillText('strings', FB.W / 2, FB.TOP - 28);
 
-    // answer marker
-    if (markerNote) {
+    // answer marker(s) — a note can be reachable at more than one string/finger
+    // (e.g. G-string 4th finger and open D are both "D"), so highlight all of them
+    for (const markerNote of markerNotes ?? []) {
         const i  = STRING_ORDER.indexOf(markerNote.string);
         const x  = FB.X0 + i * FB.X_STP;
         const fy = markerNote.low
@@ -603,7 +606,7 @@ class NoteTrainerApp {
         this.keyAcc        = [];   // active key-signature accidentals
         this._keyNotes     = [];
         this._showKey      = false;
-        this._markerNote   = null;
+        this._markerNotes  = [];
         this._testSize     = 0;
         this._testRemain   = 0;
         this._testTimes    = [];
@@ -871,7 +874,7 @@ class NoteTrainerApp {
     }
 
     _redrawFB() {
-        drawFingerboard(this._fbCtx, this._keyNotes, this._showKey, this._markerNote);
+        drawFingerboard(this._fbCtx, this._keyNotes, this._showKey, this._markerNotes);
     }
 
     _startTest() {
@@ -905,7 +908,7 @@ class NoteTrainerApp {
         this.currentNote = src[Math.floor(Math.random() * src.length)];
 
         drawStaff(this._sCtx, this.currentNote, this.keyAcc);
-        this._markerNote = null;
+        this._markerNotes = [];
         this._redrawFB();
         drawPiano(this._pCtx, null);
 
@@ -956,7 +959,9 @@ class NoteTrainerApp {
             this._feedback.className   = 'feedback incorrect';
         }
 
-        this._markerNote = note;
+        // highlight every string/finger that produces this exact pitch (name + accidental + octave)
+        this._markerNotes = NOTES.filter(n =>
+            n.name === note.name && n.accidental === note.accidental && n.octave === note.octave);
         this._redrawFB();
         drawPiano(this._pCtx, note);
 
