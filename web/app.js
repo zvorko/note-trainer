@@ -1,5 +1,5 @@
 import {
-    NOTES, STRING_ORDER, accSymbol, fingerLabel, noteDisplayName,
+    NOTES, POSITIONS, STRING_ORDER, accSymbol, fingerLabel, noteDisplayName,
     noteToSemitone, KEY_SIGNATURES, keySigDrawItems, filterNotesForKey,
 } from './notes.js';
 
@@ -31,6 +31,8 @@ const BLACK_KEYS = [
     { label: "H\u266D", name: "H", acc: "flat",  after: 5 },
 ];
 
+// Row 0 (open string) only applies to 1st position — 2nd/3rd position shift
+// the whole hand up the fingerboard, so there's no open string to play.
 const FINGER_POSITIONS = [
     { finger: 0, low: false, label: "0"  },
     { finger: 1, low: true,  label: "1L" },
@@ -43,8 +45,14 @@ const FINGER_POSITIONS = [
     { finger: 4, low: false, label: "4"  },
 ];
 
-// fast (string, finger, low) → note lookup
-const NOTE_LOOKUP = new Map(NOTES.map(n => [`${n.string}:${n.finger}:${n.low}`, n]));
+function fingerPositionsFor(position) {
+    return position === 1 ? FINGER_POSITIONS : FINGER_POSITIONS.slice(1);
+}
+
+// fast (string, finger, low) → note lookup for a given position's note set
+function buildNoteLookup(positionNotes) {
+    return new Map(positionNotes.map(n => [`${n.string}:${n.finger}:${n.low}`, n]));
+}
 
 // ─── Canvas helpers ──────────────────────────────────────────────────────────
 
@@ -189,25 +197,30 @@ function fingerY(finger) {
     return FB.TOP + (FB.BOT - FB.TOP) * finger / 4;
 }
 
+function stringX(i) {
+    return FB.X0 + i * FB.X_STP;
+}
+
 function posY(finger, low) {
     return low ? (fingerY(finger) + fingerY(finger - 1)) / 2 : fingerY(finger);
 }
 
-function drawFingerboard(ctx, keyNotes, showKey, markerNotes) {
+function drawFingerboard(ctx, keyNotes, showKey, markerNotes, position, noteLookup) {
     ctx.clearRect(0, 0, FB.W, FB.H);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, FB.W, FB.H);
 
+    const fingerPositions = fingerPositionsFor(position);
     const keyIds = new Set(keyNotes.map(n => `${n.string}:${n.finger}:${n.low}`));
-    const r = 9;
+    const r = 10;
 
     // target ovals (drawn before strings so strings sit on top)
-    for (const { finger, low } of FINGER_POSITIONS) {
+    for (const { finger, low } of fingerPositions) {
         const fy = posY(finger, low);
         STRING_ORDER.forEach((str, i) => {
-            const x    = FB.X0 + i * FB.X_STP;
+            const x    = stringX(i);
             const key  = `${str}:${finger}:${low}`;
-            const note = NOTE_LOOKUP.get(key);
+            const note = noteLookup.get(key);
             let fill = 'white', stroke = '#bbb';
             if (!note) {
                 fill = '#f0f0f0'; stroke = '#ddd';
@@ -227,10 +240,10 @@ function drawFingerboard(ctx, keyNotes, showKey, markerNotes) {
     }
 
     // string lines
-    ctx.lineWidth = 3;
     STRING_ORDER.forEach((name, i) => {
-        const x = FB.X0 + i * FB.X_STP;
+        const x = stringX(i);
         ctx.strokeStyle = '#444';
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(x, FB.TOP);
         ctx.lineTo(x, FB.BOT);
@@ -245,7 +258,7 @@ function drawFingerboard(ctx, keyNotes, showKey, markerNotes) {
         // tick marks at each finger position
         ctx.strokeStyle = '#999';
         ctx.lineWidth = 1;
-        for (const { finger, low } of FINGER_POSITIONS) {
+        for (const { finger, low } of fingerPositions) {
             const fy = posY(finger, low);
             ctx.beginPath();
             ctx.moveTo(x - 5, fy);
@@ -257,7 +270,7 @@ function drawFingerboard(ctx, keyNotes, showKey, markerNotes) {
     // position labels on the left
     ctx.fillStyle = '#555';
     ctx.textAlign = 'center';
-    for (const { finger, low, label } of FINGER_POSITIONS) {
+    for (const { finger, low, label } of fingerPositions) {
         ctx.font = '9px Helvetica, sans-serif';
         ctx.fillText(label, 18, posY(finger, low) + 4);
     }
@@ -272,7 +285,7 @@ function drawFingerboard(ctx, keyNotes, showKey, markerNotes) {
     // (e.g. G-string 4th finger and open D are both "D"), so highlight all of them
     for (const markerNote of markerNotes ?? []) {
         const i  = STRING_ORDER.indexOf(markerNote.string);
-        const x  = FB.X0 + i * FB.X_STP;
+        const x  = stringX(i);
         const fy = markerNote.low
             ? (fingerY(markerNote.finger) + fingerY(markerNote.finger - 1)) / 2
             : fingerY(markerNote.finger);
@@ -357,7 +370,7 @@ function pianoHitTest(x, y) {
     return null;
 }
 
-function fingerboardHitTest(x, y) {
+function fingerboardHitTest(x, y, position, noteLookup) {
     if (y < FB.TOP - 5 || y > FB.BOT + 5) return null;
     let bestStr = 0;
     STRING_ORDER.forEach((_, i) => {
@@ -365,10 +378,11 @@ function fingerboardHitTest(x, y) {
             bestStr = i;
     });
     if (Math.abs(x - (FB.X0 + bestStr * FB.X_STP)) > FB.X_STP / 2) return null;
-    const best = FINGER_POSITIONS.reduce((b, fp) =>
+    const fingerPositions = fingerPositionsFor(position);
+    const best = fingerPositions.reduce((b, fp) =>
         Math.abs(posY(fp.finger, fp.low) - y) < Math.abs(posY(b.finger, b.low) - y) ? fp : b
     );
-    return NOTE_LOOKUP.get(`${STRING_ORDER[bestStr]}:${best.finger}:${best.low}`) ?? null;
+    return noteLookup.get(`${STRING_ORDER[bestStr]}:${best.finger}:${best.low}`) ?? null;
 }
 
 // ─── Progress chart (SVG line chart) ────────────────────────────────────────
@@ -604,7 +618,9 @@ class NoteTrainerApp {
         this.currentNote   = null;
         this.awaitingNext  = false;
         this.keyAcc        = [];   // active key-signature accidentals
+        this.position      = 1;    // violin hand position: 1st/2nd/3rd
         this._keyNotes     = [];
+        this._noteLookup   = buildNoteLookup(POSITIONS[1]);
         this._showKey      = false;
         this._markerNotes  = [];
         this._testSize     = 0;
@@ -629,6 +645,7 @@ class NoteTrainerApp {
         this._playerIn     = document.getElementById('player-input');
         this._playerDL     = document.getElementById('player-list');
         this._keySelect    = document.getElementById('key-select');
+        this._positionSelect = document.getElementById('position-select');
         this._testCount    = document.getElementById('test-count');
         this._showKeyCb    = document.getElementById('show-key-cb');
         this._screenSetup  = document.getElementById('screen-setup');
@@ -662,6 +679,7 @@ class NoteTrainerApp {
         });
 
         this._keySelect.addEventListener('change', () => this._onKeyChange());
+        this._positionSelect.addEventListener('change', () => this._onPositionChange());
 
         this._showKeyCb.addEventListener('change', () => {
             this._showKey = this._showKeyCb.checked;
@@ -725,7 +743,7 @@ class NoteTrainerApp {
 
         hitCanvas(document.getElementById('fingerboard-canvas'), ({ x, y }) => {
             if (this.awaitingNext) return;
-            const note = fingerboardHitTest(x, y);
+            const note = fingerboardHitTest(x, y, this.position, this._noteLookup);
             if (note) this.checkAnswer(note.name, note.accidental, 'violin');
         });
     }
@@ -858,6 +876,7 @@ class NoteTrainerApp {
         document.getElementById('piano-wrap').style.display   = mode === 'piano'  ? '' : 'none';
         document.getElementById('fb-wrap').style.display      = mode === 'violin' ? '' : 'none';
         document.querySelector('.show-key-row').style.display = mode === 'violin' ? '' : 'none';
+        document.querySelector('.position-row').style.display = mode === 'violin' ? '' : 'none';
     }
 
     _onKeyChange() {
@@ -868,13 +887,30 @@ class NoteTrainerApp {
         this.newNote();
     }
 
+    _onPositionChange() {
+        this.position = parseInt(this._positionSelect.value, 10);
+        this._refreshKeyNotes();
+        if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+        this.newNote();
+    }
+
+    // notes reachable in the currently selected violin position; irrelevant
+    // (and unused) in piano mode, which always draws from the full note set
+    _currentPositionNotes() {
+        return POSITIONS[this.position];
+    }
+
     _refreshKeyNotes() {
-        this._keyNotes = filterNotesForKey(this.keyAcc);
+        const positionNotes = this._currentPositionNotes();
+        this._keyNotes   = filterNotesForKey(positionNotes, this.keyAcc);
+        this._noteLookup = buildNoteLookup(positionNotes);
         this._redrawFB();
     }
 
     _redrawFB() {
-        drawFingerboard(this._fbCtx, this._keyNotes, this._showKey, this._markerNotes);
+        drawFingerboard(
+            this._fbCtx, this._keyNotes, this._showKey, this._markerNotes,
+            this.position, this._noteLookup);
     }
 
     _startTest() {
@@ -902,7 +938,9 @@ class NoteTrainerApp {
 
     newNote() {
         this._timer = null;
-        const pool    = filterNotesForKey(this.keyAcc);
+        const mode        = document.querySelector('input[name="input-mode"]:checked')?.value ?? 'piano';
+        const sourceNotes = mode === 'violin' ? this._currentPositionNotes() : NOTES;
+        const pool    = filterNotesForKey(sourceNotes, this.keyAcc);
         const choices = pool.filter(n => n !== this.currentNote);
         const src     = choices.length ? choices : pool;
         this.currentNote = src[Math.floor(Math.random() * src.length)];
@@ -959,8 +997,8 @@ class NoteTrainerApp {
             this._feedback.className   = 'feedback incorrect';
         }
 
-        // highlight every string/finger that produces this exact pitch (name + accidental + octave)
-        this._markerNotes = NOTES.filter(n =>
+        // highlight every string/finger (within the current position) that produces this pitch
+        this._markerNotes = this._currentPositionNotes().filter(n =>
             n.name === note.name && n.accidental === note.accidental && n.octave === note.octave);
         this._redrawFB();
         drawPiano(this._pCtx, note);
